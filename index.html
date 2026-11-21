@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Doodle Jump+</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <div id="gameContainer">
+    <canvas id="game"></canvas>
+
+    <div id="hud">
+      <span>Счёт: <span id="score">0</span></span>
+      <span id="ammo" class="hidden">Патроны: <span id="ammoCount">0</span></span>
+      <span id="shield" class="hidden">Щит активен</span>
+    </div>
+
+    <button id="shootBtn">Огонь</button>
+
+    <div id="startScreen" class="overlay">
+      <h1>Doodle Jump+</h1>
+      <button id="startBtn">Играть</button>
+    </div>
+
+    <div id="gameOverScreen" class="overlay hidden">
+      <h1>Игра окончена!</h1>
+      <p>Счёт: <span id="finalScore">0</span></p>
+      <p>Рекорд: <span id="bestScore">0</span></p>
+      <p>Монстров убито: <span id="killsCount">0</span></p>
+      <button id="restartBtn">Заново</button>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+
+</html>
