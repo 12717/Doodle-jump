@@ -12,6 +12,7 @@
   const startBtn = document.getElementById('startBtn');
   const restartBtn = document.getElementById('restartBtn');
   const shootBtn = document.getElementById('shootBtn');
+  const killsEl = document.getElementById('killsCount'); 
 
   let W = 400, H = 640;
 
@@ -41,8 +42,9 @@
   const PLATFORM_W = 70, PLATFORM_H = 15;
 
  
-  let player, platforms, bullets, particles; 
+  let player, platforms, bullets, particles, monsters; 
   let score, maxHeight, gameOver, running;
+   let kills = 0;
   let ammo = 0, shield = 0, rocketTimer = 0;
   let keys = { left: false, right: false, shoot: false };
   let shootCooldown = 0;
@@ -54,6 +56,16 @@
       vx: type === 'moving' ? (Math.random() < 0.5 ? -1.5 : 1.5) : 0,
       broken: false, breakTimer: 0,
       used: false
+    };
+  }
+ function createMonster(x, y) {
+    const type = Math.random() < 0.5 ? 'walker' : 'flyer';
+    return {
+      x, y, w: 44, h: 40, type,
+      vx: type === 'walker' ? (Math.random() < 0.5 ? -1.2 : 1.2) : (Math.random() < 0.5 ? -1.8 : 1.8),
+      baseY: y,
+      time: 0,
+      alive: true
     };
   }
 
@@ -81,6 +93,7 @@
     platforms = [];
     bullets = [];
     particles = [];
+     monsters = [];
 
     platforms.push(createPlatform(W / 2 - PLATFORM_W / 2, H - 50, 'normal'));
     
@@ -97,6 +110,7 @@
 
     score = 0;
     maxHeight = 0;
+    kills = 0; 
     ammo = 0;
     shield = 0;
     rocketTimer = 0;
@@ -138,8 +152,14 @@
       
       platforms.push(createPlatform(x, newY, type));
       topY = newY;
+      if (score > 500 && Math.random() < 0.08 + difficulty * 0.07) {
+        const mx = Math.random() * (W - 44);
+        const my = newY - 80 - Math.random() * 60;
+        monsters.push(createMonster(mx, my));
+      }
     }
     platforms = platforms.filter(p => p.y < H + 50);
+      monsters = monsters.filter(m => m.y < H + 100);
   }
 
   function shoot() {
@@ -205,9 +225,63 @@
       }
     }
 
+     for (const m of monsters) {
+      if (!m.alive) continue;
+      if (player.x < m.x + m.w && player.x + player.w > m.x &&
+          player.y < m.y + m.h && player.y + player.h > m.y) {
+        const playerBottom = player.y + player.h;
+        const monsterTop = m.y;
+      
+        if (player.vy > 0 && playerBottom - player.vy <= monsterTop + 8) {
+          m.alive = false;
+          player.vy = JUMP_POWER * 0.9;
+          kills++;
+          for (let i = 0; i < 12; i++) particles.push(createParticle(m.x + m.w/2, m.y + m.h/2, '#9b59b6'));
+        } else {
+        
+          if (shield > 0) {
+            shield = 0;
+            m.alive = false;
+            player.vy = JUMP_POWER;
+            for (let i = 0; i < 10; i++) particles.push(createParticle(m.x + m.w/2, m.y + m.h/2, '#3498db'));
+            updateHUD();
+          } else {
+            endGame();
+            return;
+          }
+        }
+      }
+    }
+
+    for (const m of monsters) {
+      m.time++;
+      m.x += m.vx;
+      if (m.type === 'walker') {
+        if (m.x < 0) { m.x = 0; m.vx *= -1; }
+        if (m.x + m.w > W) { m.x = W - m.w; m.vx *= -1; }
+      } else {
+        m.y = m.baseY + Math.sin(m.time / 15) * 15;
+        if (m.x < 0) { m.x = 0; m.vx *= -1; }
+        if (m.x + m.w > W) { m.x = W - m.w; m.vx *= -1; }
+      }
+    }
+    monsters = monsters.filter(m => m.alive);
+
     for (const b of bullets) b.y += b.vy;
     bullets = bullets.filter(b => b.y > -50);
 
+ for (const b of bullets) {
+      for (const m of monsters) {
+        if (!m.alive) continue;
+        if (b.x < m.x + m.w && b.x + b.w > m.x &&
+            b.y < m.y + m.h && b.y + b.h > m.y) {
+          m.alive = false;
+          b.y = -100;
+          kills++;
+          for (let i = 0; i < 12; i++) particles.push(createParticle(m.x + m.w/2, m.y + m.h/2, '#e74c3c'));
+        }
+      }
+    }
 
     for (const p of particles) {
       p.x += p.vx;
@@ -235,6 +309,7 @@
       const dy = mid - player.y;
       player.y = mid;
       for (const p of platforms) p.y += dy; 
+       for (const m of monsters) { m.y += dy; if (m.baseY !== undefined) m.baseY += dy; }
       for (const b of bullets) b.y += dy;
       for (const p of particles) p.y += dy;
       maxHeight += dy;
@@ -299,7 +374,60 @@
       ctx.stroke();
     }
   }
+ function drawMonster(m) {
+    ctx.save();
+    const mx = Math.round(m.x);
+    const my = Math.round(m.y);
+    const mw = m.w, mh = m.h;
+    const cx = mx + mw/2, cy = my + mh/2;
 
+    ctx.fillStyle = '#9b59b6';
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 2.5;
+    if (m.type === 'flyer') {
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, mw/2 - 2, mh/2 - 2, 0, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#c39bd3';
+      const wingFlap = Math.sin(m.time / 8) * 4;
+      ctx.beginPath();
+      ctx.ellipse(mx - 2, cy + wingFlap, 8, 5, 0, 0, Math.PI * 2);
+      ctx.ellipse(mx + mw + 2, cy - wingFlap, 8, 5, 0, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+    } else {
+      drawRoundRect(mx, my, mw, mh, 8, '#9b59b6', '#333');
+      ctx.fillStyle = '#fff';
+      for (let i = 0; i < 4; i++) {
+        ctx.beginPath();
+        ctx.moveTo(mx + 6 + i * 9, my + mh - 8);
+        ctx.lineTo(mx + 10 + i * 9, my + mh);
+        ctx.lineTo(mx + 14 + i * 9, my + mh - 8);
+        ctx.fill();
+      }
+    }
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(cx - 8, cy - 4, 5, 0, Math.PI * 2);
+    ctx.arc(cx + 8, cy - 4, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = '#c0392b';
+    ctx.beginPath();
+    ctx.arc(cx - 8, cy - 4, 2.5, 0, Math.PI * 2);
+    ctx.arc(cx + 8, cy - 4, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(cx - 13, cy - 10);
+    ctx.lineTo(cx - 4, cy - 7);
+    ctx.moveTo(cx + 13, cy - 10);
+    ctx.lineTo(cx + 4, cy - 7);
+    ctx.stroke();
+    ctx.restore();
+  }
 
   function drawBullet(b) {
     ctx.fillStyle = '#f1c40f';
@@ -401,6 +529,9 @@
   function draw() {
     drawBackground();
     for (const p of platforms) drawPlatform(p);
+     for (const m of monsters) {
+      if (m.alive) drawMonster(m);
+    }
     for (const b of bullets) drawBullet(b);
     drawParticles();
     drawPlayer();
@@ -421,6 +552,7 @@
     }
     finalScoreEl.textContent = score;
     bestScoreEl.textContent = best;
+    killsEl.textContent = kills; 
     gameOverScreen.classList.remove('hidden');
   }
 
