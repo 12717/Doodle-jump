@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Doodle Jump+</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <div id="gameContainer">
+    <canvas id="game"></canvas>
+
+    <div id="hud">
+      <span>Счёт: <span id="score">0</span></span>
+      <span id="ammo" class="hidden">Патроны: <span id="ammoCount">0</span></span>
+      <span id="shield" class="hidden">Щит активен</span>
+    </div>
+
+    <button id="shootBtn">Огонь</button>
+
+    <div id="startScreen" class="overlay">
+      <h1>Doodle Jump+</h1>
+      <p>Прыгай, стреляй и уворачивайся от монстров!</p>
+      <div class="legend">
+        <span>Пружина</span><span>— суперпрыжок</span>
+        <span>Пушка</span><span>— 5 выстрелов</span>
+        <span>Ракета</span><span>— полёт вверх</span>
+        <span>Щит</span><span>— защита от монстра</span>
+        <span>Ломающаяся</span><span>— прыжок 1 раз!</span>
+        <span>Монстры</span><span>— прыгай сверху!</span>
+      </div>
+      <p class="controls-text">
+        ПК: ← → или A/D, Пробел — выстрел<br>
+        Телефон: тап по сторонам экрана, кнопка "Огонь" — выстрел
+      </p>
+      <button id="startBtn">Играть</button>
+    </div>
+
+    <div id="gameOverScreen" class="overlay hidden">
+      <h1>Игра окончена!</h1>
+      <p>Счёт: <span id="finalScore">0</span></p>
+      <p>Рекорд: <span id="bestScore">0</span></p>
+      <p>Монстров убито: <span id="killsCount">0</span></p>
+      <button id="restartBtn">Заново</button>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+
+</html>
