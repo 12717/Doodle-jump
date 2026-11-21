@@ -42,7 +42,7 @@
   const PLATFORM_W = 70, PLATFORM_H = 15;
 
  
-  let player, platforms, bullets, particles, monsters; 
+    let player, platforms, bullets, particles, monsters, powerups;
   let score, maxHeight, gameOver, running;
    let kills = 0;
   let ammo = 0, shield = 0, rocketTimer = 0;
@@ -67,6 +67,9 @@
       time: 0,
       alive: true
     };
+  }
+  function createPowerup(x, y, type, platform = null) {
+    return { x, y, w: 26, h: 26, type, taken: false, platform };
   }
 
   function createBullet(x, y) {
@@ -93,7 +96,8 @@
     platforms = [];
     bullets = [];
     particles = [];
-     monsters = [];
+    monsters = [];
+    powerups = [];
 
     platforms.push(createPlatform(W / 2 - PLATFORM_W / 2, H - 50, 'normal'));
     
@@ -105,6 +109,11 @@
       if (r < 0.10) type = 'breakable';
       else if (r < 0.20) type = 'moving';
       platforms.push(createPlatform(x, y, type));
+       if (Math.random() < 0.15) {
+        const types = ['spring', 'gun', 'rocket', 'shield'];
+        const pType = types[Math.floor(Math.random() * types.length)];
+        powerups.push(createPowerup(x + PLATFORM_W/2 - 13, y - 28, pType, platforms[platforms.length - 1]));
+      }
       y -= 50 + Math.random() * 30;
     }
 
@@ -150,8 +159,22 @@
       if (r < 0.10 + difficulty * 0.15) type = 'breakable';
       else if (r < 0.20 + difficulty * 0.15) type = 'moving';
       
-      platforms.push(createPlatform(x, newY, type));
+     const platform = createPlatform(x, newY, type);
+      platforms.push(platform); 
       topY = newY;
+
+      const bonusChance = 0.15 + difficulty * 0.05;
+      if (Math.random() < bonusChance) {
+        const types = ['spring', 'gun', 'rocket', 'shield'];
+        const weights = [0.4, 0.25, 0.15, 0.2]; 
+        let rr = Math.random(), acc = 0, pType = 'spring';
+        for (let i = 0; i < types.length; i++) {
+          acc += weights[i];
+          if (rr < acc) { pType = types[i]; break; }
+        }
+        powerups.push(createPowerup(x + PLATFORM_W/2 - 13, newY - 28, pType, platform));
+      }
+
       if (score > 500 && Math.random() < 0.08 + difficulty * 0.07) {
         const mx = Math.random() * (W - 44);
         const my = newY - 80 - Math.random() * 60;
@@ -159,7 +182,8 @@
       }
     }
     platforms = platforms.filter(p => p.y < H + 50);
-      monsters = monsters.filter(m => m.y < H + 100);
+    monsters = monsters.filter(m => m.y < H + 100);
+    powerups = powerups.filter(p => p.y < H + 50); 
   }
 
   function shoot() {
@@ -225,7 +249,29 @@
       }
     }
 
-     for (const m of monsters) {
+     for (const pu of powerups) {
+      if (pu.taken) continue;
+      if (player.x < pu.x + pu.w && player.x + player.w > pu.x &&
+          player.y < pu.y + pu.h && player.y + player.h > pu.y) {
+        pu.taken = true;
+        
+        if (pu.type === 'spring') {
+          player.vy = SUPER_JUMP; 
+        } else if (pu.type === 'gun') {
+          ammo = Math.min(ammo + 5, 15); 
+        } else if (pu.type === 'rocket') {
+          rocketTimer = 90; 
+          player.vy = -8;
+        } else if (pu.type === 'shield') {
+          shield = 1; 
+        }
+        for (let i = 0; i < 8; i++) particles.push(createParticle(pu.x + pu.w/2, pu.y + pu.h/2, '#ffd700'));
+        updateHUD();
+      }
+    }
+    powerups = powerups.filter(p => !p.taken);
+
+    for (const m of monsters) {
       if (!m.alive) continue;
       if (player.x < m.x + m.w && player.x + player.w > m.x &&
           player.y < m.y + m.h && player.y + player.h > m.y) {
@@ -238,7 +284,6 @@
           kills++;
           for (let i = 0; i < 12; i++) particles.push(createParticle(m.x + m.w/2, m.y + m.h/2, '#9b59b6'));
         } else {
-        
           if (shield > 0) {
             shield = 0;
             m.alive = false;
@@ -290,8 +335,12 @@
       p.life--;
     }
     particles = particles.filter(p => p.life > 0);
-
- for (const p of platforms) {
+    for (const pu of powerups) {
+      if (pu.platform && pu.platform.type === 'moving') {
+        pu.x = pu.platform.x + PLATFORM_W/2 - pu.w/2;
+      }
+    }
+    for (const p of platforms) {
       if (p.type === 'moving') {
         p.x += p.vx;
         if (p.x < 0) { p.x = 0; p.vx *= -1; }
@@ -309,7 +358,8 @@
       const dy = mid - player.y;
       player.y = mid;
       for (const p of platforms) p.y += dy; 
-       for (const m of monsters) { m.y += dy; if (m.baseY !== undefined) m.baseY += dy; }
+      for (const m of monsters) { m.y += dy; if (m.baseY !== undefined) m.baseY += dy; }
+      for (const pu of powerups) pu.y += dy;
       for (const b of bullets) b.y += dy;
       for (const p of particles) p.y += dy;
       maxHeight += dy;
@@ -374,7 +424,69 @@
       ctx.stroke();
     }
   }
- function drawMonster(m) {
+    function drawPowerup(pu) {
+    const cx = pu.x + pu.w/2, cy = pu.y + pu.h/2;
+    ctx.save();
+    if (pu.type === 'spring') {
+      ctx.strokeStyle = '#f39c12';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      for (let i = 0; i < 4; i++) {
+        const yy = pu.y + 4 + i * 5;
+        ctx.moveTo(pu.x + 4, yy);
+        ctx.lineTo(pu.x + pu.w - 4, yy);
+      }
+      ctx.stroke();
+      ctx.fillStyle = '#e67e22';
+      ctx.fillRect(pu.x + 2, pu.y, pu.w - 4, 4);
+      ctx.fillRect(pu.x + 2, pu.y + pu.h - 4, pu.w - 4, 4);
+    } else if (pu.type === 'gun') {
+      ctx.fillStyle = '#34495e';
+      ctx.fillRect(pu.x + 2, pu.y + 12, pu.w - 4, 10);
+      ctx.fillRect(pu.x + 6, pu.y + 2, pu.w - 12, 12);
+      ctx.fillStyle = '#c0392b';
+      ctx.fillRect(pu.x + pu.w/2 - 3, pu.y - 4, 6, 8);
+    } else if (pu.type === 'rocket') {
+      ctx.fillStyle = '#e74c3c';
+      ctx.beginPath();
+      ctx.moveTo(cx, pu.y);
+      ctx.lineTo(cx + 8, pu.y + 14);
+      ctx.lineTo(cx + 8, pu.y + pu.h);
+      ctx.lineTo(cx - 8, pu.y + pu.h);
+      ctx.lineTo(cx - 8, pu.y + 14);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.fillStyle = '#f39c12';
+      ctx.beginPath();
+      ctx.moveTo(cx - 5, pu.y + pu.h);
+      ctx.lineTo(cx, pu.y + pu.h + 6);
+      ctx.lineTo(cx + 5, pu.y + pu.h);
+      ctx.fill();
+    } else if (pu.type === 'shield') {
+      ctx.fillStyle = '#3498db';
+      ctx.strokeStyle = '#2c3e50';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(cx, pu.y);
+      ctx.lineTo(pu.x + pu.w, pu.y + 6);
+      ctx.lineTo(pu.x + pu.w - 3, pu.y + pu.h - 4);
+      ctx.lineTo(cx, pu.y + pu.h);
+      ctx.lineTo(pu.x + 3, pu.y + pu.h - 4);
+      ctx.lineTo(pu.x, pu.y + 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('+', cx, cy + 5);
+    }
+    ctx.restore();
+  }
+  function drawMonster(m) {
     ctx.save();
     const mx = Math.round(m.x);
     const my = Math.round(m.y);
@@ -529,6 +641,7 @@
   function draw() {
     drawBackground();
     for (const p of platforms) drawPlatform(p);
+    for (const pu of powerups) drawPowerup(pu);
      for (const m of monsters) {
       if (m.alive) drawMonster(m);
     }
