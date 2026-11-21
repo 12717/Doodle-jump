@@ -33,10 +33,10 @@
   window.addEventListener('resize', resize);
   resize();
 
-  const GRAVITY = 0.35;
-  const JUMP_POWER = -11; 
+  const GRAVITY = 0.15;
+  const JUMP_POWER = -8; 
   const SUPER_JUMP = -19;
-  const MOVE_SPEED = 5.5;
+  const MOVE_SPEED = 3.5;
   const PLAYER_W = 44, PLAYER_H = 44;
   const BULLET_SPEED = 10;
   const PLATFORM_W = 70, PLATFORM_H = 15;
