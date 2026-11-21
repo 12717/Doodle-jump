@@ -7,7 +7,6 @@
   const shieldEl = document.getElementById('shield');
   const finalScoreEl = document.getElementById('finalScore');
   const bestScoreEl = document.getElementById('bestScore');
-  // Удалили killsEl, так как монстров больше нет
   const startScreen = document.getElementById('startScreen');
   const gameOverScreen = document.getElementById('gameOverScreen');
   const startBtn = document.getElementById('startBtn');
@@ -34,21 +33,29 @@
   resize();
 
   const GRAVITY = 0.35;
-  const JUMP_POWER = -11; // Оставили константы на случай будущих правок
+  const JUMP_POWER = -11; 
   const SUPER_JUMP = -19;
   const MOVE_SPEED = 5.5;
   const PLAYER_W = 44, PLAYER_H = 44;
   const BULLET_SPEED = 10;
+  const PLATFORM_W = 70, PLATFORM_H = 15;
 
-  // Убрали platforms, monsters, powerups из глобальных переменных
-  let player, bullets, particles;
+ 
+  let player, platforms, bullets, particles; 
   let score, maxHeight, gameOver, running;
   let ammo = 0, shield = 0, rocketTimer = 0;
   let keys = { left: false, right: false, shoot: false };
   let shootCooldown = 0;
   let best = parseInt(localStorage.getItem('doodleBest2') || '0', 10);
 
-  // Удалили createPlatform, createMonster, createPowerup
+  function createPlatform(x, y, type = 'normal') {
+    return {
+      x, y, w: PLATFORM_W, h: PLATFORM_H, type,
+      vx: type === 'moving' ? (Math.random() < 0.5 ? -1.5 : 1.5) : 0,
+      broken: false, breakTimer: 0,
+      used: false
+    };
+  }
 
   function createBullet(x, y) {
     return { x, y, w: 6, h: 14, vy: -BULLET_SPEED };
@@ -71,8 +78,23 @@
       vx: 0, vy: 0,
       dir: 1
     };
+    platforms = [];
     bullets = [];
     particles = [];
+
+    platforms.push(createPlatform(W / 2 - PLATFORM_W / 2, H - 50, 'normal'));
+    
+    let y = H - 120;
+    while (y > -200) {
+      const x = Math.random() * (W - PLATFORM_W);
+      let type = 'normal';
+      const r = Math.random();
+      if (r < 0.10) type = 'breakable';
+      else if (r < 0.20) type = 'moving';
+      platforms.push(createPlatform(x, y, type));
+      y -= 50 + Math.random() * 30;
+    }
+
     score = 0;
     maxHeight = 0;
     ammo = 0;
@@ -95,6 +117,29 @@
     }
     if (shield > 0) shieldEl.classList.remove('hidden');
     else shieldEl.classList.add('hidden');
+  }
+
+  function generateContent() {
+    let topY = Infinity;
+    for (const p of platforms) if (p.y < topY) topY = p.y;
+    const difficulty = Math.min(score / 3000, 1.0);
+
+    const baseGap = 50;
+    const maxGap = 85;
+    const currentGap = baseGap + (maxGap - baseGap) * difficulty;
+
+    while (topY > -250) {
+      const newY = topY - (currentGap + Math.random() * 30);
+      const x = Math.random() * (W - PLATFORM_W);
+      let type = 'normal';
+      const r = Math.random();
+      if (r < 0.10 + difficulty * 0.15) type = 'breakable';
+      else if (r < 0.20 + difficulty * 0.15) type = 'moving';
+      
+      platforms.push(createPlatform(x, newY, type));
+      topY = newY;
+    }
+    platforms = platforms.filter(p => p.y < H + 50);
   }
 
   function shoot() {
@@ -131,6 +176,35 @@
     if (player.x + player.w < 0) player.x = W;
     else if (player.x > W) player.x = -player.w;
 
+     if (player.vy > 0 && rocketTimer <= 0) {
+      for (const p of platforms) {
+        if (p.broken) continue;
+        const prevBottom = player.y + player.h - player.vy;
+        const curBottom = player.y + player.h;
+        if (prevBottom <= p.y &&
+            curBottom >= p.y &&
+            player.x + player.w > p.x + 6 &&
+            player.x < p.x + p.w - 6) {
+          if (p.type === 'breakable') {
+            if (!p.used) {
+              player.vy = JUMP_POWER;
+              player.y = p.y - player.h;
+              p.used = true;
+              for (let i = 0; i < 6; i++) {
+                particles.push(createParticle(p.x + Math.random() * p.w, p.y, '#8b6f47'));
+              }
+            } else {
+              p.broken = true;
+              p.breakTimer = 10;
+            }
+          } else {
+            player.vy = JUMP_POWER;
+            player.y = p.y - player.h;
+          }
+        }
+      }
+    }
+
     for (const b of bullets) b.y += b.vy;
     bullets = bullets.filter(b => b.y > -50);
 
@@ -143,12 +217,24 @@
     }
     particles = particles.filter(p => p.life > 0);
 
+ for (const p of platforms) {
+      if (p.type === 'moving') {
+        p.x += p.vx;
+        if (p.x < 0) { p.x = 0; p.vx *= -1; }
+        if (p.x + p.w > W) { p.x = W - p.w; p.vx *= -1; }
+      }
+      if (p.broken) {
+        p.breakTimer--;
+        p.y += 3;
+      }
+    }
+    platforms = platforms.filter(p => !(p.broken && p.breakTimer <= 0));
 
     const mid = H / 2;
     if (player.y < mid) {
       const dy = mid - player.y;
       player.y = mid;
-
+      for (const p of platforms) p.y += dy; 
       for (const b of bullets) b.y += dy;
       for (const p of particles) p.y += dy;
       maxHeight += dy;
@@ -157,7 +243,7 @@
     }
 
     if (player.y > H) endGame();
-
+    generateContent(); 
   }
 
   function drawBackground() {
@@ -186,6 +272,34 @@
     if (fill) { ctx.fillStyle = fill; ctx.fill(); }
     if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 2.5; ctx.stroke(); }
   }
+   function drawPlatform(p) {
+    let fill, stroke;
+    if (p.type === 'breakable') {
+      fill = p.used ? '#a67c52' : '#d4a373';
+      stroke = '#6b4423';
+    } else if (p.type === 'moving') {
+      fill = '#a8d8a8';
+      stroke = '#2a7f3d';
+    } else {
+      fill = '#b8e0b8';
+      stroke = '#2a7f3d';
+    }
+    drawRoundRect(p.x, p.y, p.w, p.h, 6, fill, stroke);
+
+    if (p.type === 'breakable' && p.used) {
+      ctx.strokeStyle = '#4a3520';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(p.x + p.w * 0.3, p.y + 2);
+      ctx.lineTo(p.x + p.w * 0.35, p.y + p.h * 0.5);
+      ctx.lineTo(p.x + p.w * 0.25, p.y + p.h - 2);
+      ctx.moveTo(p.x + p.w * 0.65, p.y + 3);
+      ctx.lineTo(p.x + p.w * 0.7, p.y + p.h * 0.6);
+      ctx.lineTo(p.x + p.w * 0.75, p.y + p.h - 3);
+      ctx.stroke();
+    }
+  }
+
 
   function drawBullet(b) {
     ctx.fillStyle = '#f1c40f';
@@ -286,7 +400,7 @@
 
   function draw() {
     drawBackground();
-    
+    for (const p of platforms) drawPlatform(p);
     for (const b of bullets) drawBullet(b);
     drawParticles();
     drawPlayer();
